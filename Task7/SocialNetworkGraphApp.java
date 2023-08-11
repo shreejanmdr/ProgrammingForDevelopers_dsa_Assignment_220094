@@ -219,7 +219,7 @@ class SocialNetworkGraphPanel extends JPanel {
                     Node node = new Node(x, y, userName, followers);
 
                     node.profileImagePath = System.getProperty("user.dir") + "/Task7/images/" + userName
-                            + ".jpg";
+                            + ".png";
                     nodes.add(node);
                     nodeMap.put(userName, node);
                 }
@@ -381,7 +381,7 @@ class SocialNetworkGraphPanel extends JPanel {
         }
 
         boolean contains(Point point) {
-            return new Rectangle(x - 30, y - 30, 80, 80).contains(point);
+            return new Rectangle(x - 30, y - 30, 60, 60).contains(point);
         }
 
         void draw(Graphics g) {
@@ -390,7 +390,7 @@ class SocialNetworkGraphPanel extends JPanel {
             } else {
                 g.setColor(Color.blue);
             }
-            g.fillOval(x - 30, y - 30, 80, 80);
+            g.fillOval(x - 30, y - 30, 60, 60);
             g.setColor(Color.black);
             g.drawString(userName + " (" + followers + " followers)", x - 30, y + 50);
             if (profileImage != null) {
