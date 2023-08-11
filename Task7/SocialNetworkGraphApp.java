@@ -1,188 +1,445 @@
-/*
-Task 7
-    Assignment Title: Social Network Graph
-    Task: Create a GUI application that allows users to visualize a social network graph.
-Scenario: You have been hired by a social media company to create a tool that visualizes the connections between
-users. The company wants to see how users are connected and which users have the most influence over others.
-
-Requirements:
-1. The application should have a window with a canvas where the graph will be drawn.
-2. The nodes of the graph should represent users, and the edges should represent connections between users.
-3. The application should read the user data from a file and create the graph accordingly.
-4. Each node should display the user's name, profile picture, and the number of followers they have.
-5. The edges should display the strength of the connection between the users, such as the number of likes,
-    comments, or shares between them.
-6. The user should be able to select and move nodes around the canvas.
-7. The user should be able to delete nodes and edges by selecting them and pressing the delete key.
-8. The application should have a toolbar with buttons for selecting mode, adding nodes, and adding edges.
-9. The application should allow the user to search for a user and highlight their node and connections.
-    
-Grading Criteria:
-1. The application should meet all the requirements mentioned above.
-2. The user interface should be intuitive and easy to use.
-3. The application should be bug-free and stable.
-4. The application should be well-documented and commented.
-5. Bonus points will be given for additional features, such as algorithms to find the most influential users or
-    to calculate the shortest path between two users.
-
-Submission:
-Submit the source code of the application along with a short report describing the features and functionalities of
-the application. The report should also include any known bugs or issues and suggestions for future improvements.
-The code should be well-organized and properly commented.
-
-[30 Marks] 
-*/
-
 package Task7;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.*;
-import java.util.ArrayList;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.geom.Line2D;
+import java.awt.image.BufferedImage;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.*;
+import java.util.List;
 
-public class SocialNetworkGraphApp extends JFrame {
-    private GraphCanvas canvas;
-    private JToolBar toolbar;
-    private JButton selectModeButton;
-    private JButton addNodeButton;
-    private JButton addEdgeButton;
-    private JTextField searchField;
-
-    public SocialNetworkGraphApp() {
-        setTitle("Social Network Graph");
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setLayout(new BorderLayout());
-
-        canvas = new GraphCanvas();
-        add(canvas, BorderLayout.CENTER);
-
-        toolbar = new JToolBar();
-        selectModeButton = new JButton("Select Mode");
-        addNodeButton = new JButton("Add Node");
-        addEdgeButton = new JButton("Add Edge");
-        searchField = new JTextField(20);
-
-        toolbar.add(selectModeButton);
-        toolbar.add(addNodeButton);
-        toolbar.add(addEdgeButton);
-        toolbar.add(new JLabel("Search:"));
-        toolbar.add(searchField);
-
-        add(toolbar, BorderLayout.NORTH);
-
-        pack();
-        setVisible(true);
-    }
+public class SocialNetworkGraphApp {
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(SocialNetworkGraphApp::new);
-    }
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("Social Network Graph");
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-    private class GraphCanvas extends JPanel {
-        private ArrayList<Node> nodes;
-        private ArrayList<Edge> edges;
-        private Node selectedNode;
+            SocialNetworkGraphPanel graphPanel = new SocialNetworkGraphPanel();
+            frame.add(graphPanel, BorderLayout.CENTER);
 
-        public GraphCanvas() {
-            nodes = new ArrayList<>();
-            edges = new ArrayList<>();
+            JToolBar toolBar = new JToolBar();
+            JButton addNodeButton = new JButton("Add Node");
+            JButton addEdgeButton = new JButton("Add Edge");
 
-            // Read user data from a file and create nodes and edges accordingly
+            addNodeButton.addActionListener(e -> graphPanel.addNewNode());
+            addEdgeButton.addActionListener(e -> graphPanel.addNewEdge());
 
-            // Example data
-            Node node1 = new Node("User1", "Profile1.jpg", 100);
-            Node node2 = new Node("User2", "Profile2.jpg", 200);
-            Node node3 = new Node("User3", "Profile3.jpg", 300);
-            nodes.add(node1);
-            nodes.add(node2);
-            nodes.add(node3);
+            toolBar.add(addNodeButton);
+            toolBar.add(addEdgeButton);
+            frame.add(toolBar, BorderLayout.NORTH);
 
-            Edge edge1 = new Edge(node1, node2, 50);
-            Edge edge2 = new Edge(node1, node3, 70);
-            edges.add(edge1);
-            edges.add(edge2);
+            JTextField searchField = new JTextField();
+            searchField.setColumns(20);
+            JButton searchButton = new JButton("Search");
 
-            addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    for (Node node : nodes) {
-                        if (node.contains(e.getPoint())) {
-                            if (selectedNode != null) {
-                                selectedNode.setSelected(false);
-                            }
-                            node.setSelected(true);
-                            selectedNode = node;
-                            repaint();
-                            break;
-                        }
-                    }
-                }
+            searchButton.addActionListener(e -> {
+                String searchQuery = searchField.getText();
+                graphPanel.searchAndHighlightNode(searchQuery);
+                graphPanel.repaint();
             });
 
-            setPreferredSize(new Dimension(800, 600));
-            setBackground(Color.WHITE);
+            JPanel searchPanel = new JPanel();
+            searchPanel.add(new JLabel("Search User: "));
+            searchPanel.add(searchField);
+            searchPanel.add(searchButton);
+
+            frame.add(searchPanel, BorderLayout.SOUTH);
+
+            frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+            frame.setVisible(true);
+            graphPanel.requestFocusInWindow();
+        });
+    }
+}
+
+class SocialNetworkGraphPanel extends JPanel {
+    private static String directory = System.getProperty("user.dir") + "/Task7/";
+    private List<Node> nodes = new ArrayList<>();
+    private List<Edge> edges = new ArrayList<>();
+    private Map<String, Node> nodeMap = new HashMap<>();
+
+    private Node selectedNode = null;
+
+    private Node selectedEdge = null;
+    private Node draggingNode = null;
+    private Point mouseOffset = new Point();
+
+    public SocialNetworkGraphPanel() {
+        readUserDataFromFile(directory + "users.txt");
+        readConnectionsFromFile(directory + "connection.txt");
+        adjustNodePositions();
+
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                deSelectAllNodes();
+                highlightSelectedNode();
+                repaint();
+            }
+        });
+
+        addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_DELETE) {
+                    removeSelectedNode();
+                    removeSelectedEdge();
+                    repaint();
+                }
+            }
+        });
+
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                deSelectAllEdges();
+                highlightSelectedEdge();
+                repaint();
+            }
+        });
+
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                draggingNode = getSelectedNode(e.getPoint());
+                if (draggingNode != null) {
+                    mouseOffset.setLocation(e.getPoint().getX() - draggingNode.x, e.getPoint().getY() - draggingNode.y);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                draggingNode = null;
+            }
+        });
+
+        addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (draggingNode != null) {
+                    draggingNode.x = (int) (e.getPoint().getX() - mouseOffset.getX());
+                    draggingNode.y = (int) (e.getPoint().getY() - mouseOffset.getY());
+                    repaint();
+                }
+            }
+        });
+
+        setFocusable(true);
+        requestFocus();
+    }
+
+    public void searchAndHighlightNode(String searchQuery) {
+        deSelectAllNodes();
+
+        if (searchQuery != null && !searchQuery.isEmpty()) {
+            Node matchingNode = nodeMap.get(searchQuery);
+            if (matchingNode != null) {
+                matchingNode.isSelected = true;
+            }
         }
 
-        @Override
-        protected void paintComponent(Graphics g) {
-            super.paintComponent(g);
+        repaint();
+    }
 
-            for (Edge edge : edges) {
-                edge.draw(g);
+    public void addNewNode() {
+        String userName = JOptionPane.showInputDialog(this, "Enter Username:");
+        if (userName != null && !userName.isEmpty()) {
+            String followersStr = JOptionPane.showInputDialog(this, "Enter Followers:");
+            if (followersStr != null && !followersStr.isEmpty()) {
+                try {
+                    int followers = Integer.parseInt(followersStr);
+                    Node newNode = new Node(200, 200, userName, followers); // You can adjust the initial position as
+                                                                            // needed
+                    JFileChooser fileChooser = new JFileChooser();
+                    int returnValue = fileChooser.showOpenDialog(this);
+                    if (returnValue == JFileChooser.APPROVE_OPTION) {
+                        File selectedFile = fileChooser.getSelectedFile();
+                        newNode.profileImagePath = selectedFile.getAbsolutePath();
+                    }
+                    nodes.add(newNode);
+                    nodeMap.put(userName, newNode);
+                    adjustNodePositions();
+                    repaint();
+                } catch (NumberFormatException e) {
+                    JOptionPane.showMessageDialog(this, "Invalid number format for followers.", "Error",
+                            JOptionPane.ERROR_MESSAGE);
+                }
             }
+        }
+    }
 
-            for (Node node : nodes) {
-                node.draw(g);
+    public void addNewEdge() {
+        String user1Name = JOptionPane.showInputDialog(this, "Enter Username for User 1:");
+        if (user1Name != null && !user1Name.isEmpty()) {
+            String user2Name = JOptionPane.showInputDialog(this, "Enter Username for User 2:");
+            if (user2Name != null && !user2Name.isEmpty()) {
+                String strengthStr = JOptionPane.showInputDialog(this, "Enter Strength:");
+                if (strengthStr != null && !strengthStr.isEmpty()) {
+                    try {
+                        int strength = Integer.parseInt(strengthStr);
+                        Node node1 = nodeMap.get(user1Name);
+                        Node node2 = nodeMap.get(user2Name);
+
+                        if (node1 != null && node2 != null) {
+                            edges.add(new Edge(node1, node2, "Strength: " + strength));
+                            repaint();
+                        } else {
+                            JOptionPane.showMessageDialog(this, "One or both user nodes not found.", "Error",
+                                    JOptionPane.ERROR_MESSAGE);
+                        }
+                    } catch (NumberFormatException e) {
+                        JOptionPane.showMessageDialog(this, "Invalid number format for strength.", "Error",
+                                JOptionPane.ERROR_MESSAGE);
+                    }
+                }
             }
+        }
+    }
+
+    private void readUserDataFromFile(String fileName) {
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(" ");
+
+                if (parts.length == 4) {
+                    String userName = parts[0];
+                    int x = Integer.parseInt(parts[1]);
+                    int y = Integer.parseInt(parts[2]);
+                    int followers = Integer.parseInt(parts[3]);
+                    Node node = new Node(x, y, userName, followers);
+
+                    node.profileImagePath = System.getProperty("user.dir") + "/Task7/images/" + userName
+                            + ".jpg";
+                    nodes.add(node);
+                    nodeMap.put(userName, node);
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void readConnectionsFromFile(String fileName) {
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(" ");
+                if (parts.length == 3) {
+                    String user1 = parts[0];
+                    String user2 = parts[1];
+                    int strength = Integer.parseInt(parts[2]);
+                    Node node1 = nodeMap.get(user1);
+                    Node node2 = nodeMap.get(user2);
+                    if (node1 != null && node2 != null) {
+                        edges.add(new Edge(node1, node2, "Strength: " + strength));
+                    }
+                }
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void adjustNodePositions() {
+        int spacing = 150;
+        Set<Point> usedPositions = new HashSet<>();
+
+        for (Node node : nodes) {
+            Point position = new Point(node.x, node.y);
+            while (usedPositions.contains(position)) {
+                position.translate(spacing, 0);
+            }
+            node.x = position.x;
+            node.y = position.y;
+            usedPositions.add(position);
+
+            // Load profile image
+            try {
+                BufferedImage image = ImageIO.read(new File(node.profileImagePath));
+                if (image != null) {
+                    node.profileImage = image;
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private void highlightSelectedEdge() {
+        Point mousePosition = getMousePosition();
+        if (mousePosition != null) {
+            Edge selectedEdge = getSelectedEdge(mousePosition);
+            if (selectedEdge != null) {
+                selectedEdge.isSelected = true;
+            }
+        }
+    }
+
+    private void deSelectAllEdges() {
+        for (Edge edge : edges) {
+            edge.isSelected = false;
+        }
+    }
+
+    private void removeSelectedNode() {
+        Point mousePosition = getMousePosition();
+        if (mousePosition != null) {
+            Node selectedNode = getSelectedNode(mousePosition);
+            if (selectedNode != null) {
+                nodes.remove(selectedNode);
+                // Also remove connected edges
+                edges.removeIf(edge -> edge.startNode == selectedNode || edge.endNode == selectedNode);
+            }
+        }
+    }
+
+    private void removeSelectedEdge() {
+        Point mousePosition = getMousePosition();
+        if (mousePosition != null) {
+            Edge selectedEdge = getSelectedEdge(mousePosition);
+            if (selectedEdge != null) {
+                edges.remove(selectedEdge);
+            }
+        }
+    }
+
+    private void highlightSelectedNode() {
+        Point mousePosition = getMousePosition();
+        if (mousePosition != null) {
+            Node selectedNode = getSelectedNode(mousePosition);
+            if (selectedNode != null) {
+                selectedNode.isSelected = true;
+            }
+        }
+    }
+
+    private void deSelectAllNodes() {
+        for (Node node : nodes) {
+            node.isSelected = false;
+        }
+    }
+
+    private Node getSelectedNode(Point point) {
+        for (Node node : nodes) {
+            if (node.contains(point)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    private Edge getSelectedEdge(Point point) {
+        for (Edge edge : edges) {
+            if (edge.contains(point)) {
+                return edge;
+            }
+        }
+        return null;
+    }
+
+    private final int GRID_SIZE = 20;
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+
+        drawGrid(g);
+
+        for (Edge edge : edges) {
+            edge.draw(g);
+        }
+
+        for (Node node : nodes) {
+            node.draw(g);
         }
     }
 
     private class Node {
-        private String name;
-        private String profilePicture;
-        private int followers;
-        private int x;
-        private int y;
-        private boolean selected;
+        public String profileImagePath;
+        private BufferedImage profileImage;
+        int x, y;
+        String userName;
+        int followers;
 
-        public Node(String name, String profilePicture, int followers) {
-            this.name = name;
-            this.profilePicture = profilePicture;
+        boolean isSelected = false;
+
+        Node(int x, int y, String userName, int followers) {
+            this.x = x;
+            this.y = y;
+            this.userName = userName;
             this.followers = followers;
-            this.x = 0;
-            this.y = 0;
-            this.selected = false;
         }
 
-        public void draw(Graphics g) {
-            // Draw node shape and other visual elements
-            // Use the name, profile picture, and followers to display node information
-            // Highlight the node if it is selected
+        boolean contains(Point point) {
+            return new Rectangle(x - 30, y - 30, 80, 80).contains(point);
         }
 
-        public boolean contains(Point point) {
-            // Check if the given point is within the boundaries of the node shape
-            return false;
-        }
-
-        public void setSelected(boolean selected) {
-            this.selected = selected;
+        void draw(Graphics g) {
+            if (isSelected) {
+                g.setColor(Color.green); // Change color for selected node
+            } else {
+                g.setColor(Color.blue);
+            }
+            g.fillOval(x - 30, y - 30, 80, 80);
+            g.setColor(Color.black);
+            g.drawString(userName + " (" + followers + " followers)", x - 30, y + 50);
+            if (profileImage != null) {
+                int imageSize = 40;
+                g.drawImage(profileImage, x - imageSize / 2, y - imageSize / 2, imageSize, imageSize, null);
+            }
         }
     }
 
     private class Edge {
-        private Node node1;
-        private Node node2;
-        private int strength;
+        Node startNode, endNode;
+        String connectionStrength;
 
-        public Edge(Node node1, Node node2, int strength) {
-            this.node1 = node1;
-            this.node2 = node2;
-            this.strength = strength;
+        boolean isSelected = false;
+
+        Edge(Node startNode, Node endNode, String connectionStrength) {
+            this.startNode = startNode;
+            this.endNode = endNode;
+            this.connectionStrength = connectionStrength;
         }
 
-        public void draw(Graphics g) {
-            // Draw edge line and display the strength of the connection
+        boolean contains(Point point) {
+            return new Line2D.Double(startNode.x, startNode.y, endNode.x, endNode.y).ptLineDist(point) < 5;
         }
+
+        void draw(Graphics g) {
+            if (isSelected) {
+                g.setColor(Color.red); // Change color for selected edge
+            } else {
+                g.setColor(Color.black);
+            }
+
+            g.drawLine(startNode.x, startNode.y, endNode.x, endNode.y);
+            g.drawString(connectionStrength, (startNode.x + endNode.x) / 2 - 20, (startNode.y + endNode.y) / 2 + 20);
+        }
+    }
+
+    private void drawGrid(Graphics g) {
+        g.setColor(Color.lightGray);
+        for (int x = 0; x < getWidth(); x += GRID_SIZE) {
+            g.drawLine(x, 0, x, getHeight());
+        }
+        for (int y = 0; y < getHeight(); y += GRID_SIZE) {
+            g.drawLine(0, y, getWidth(), y);
+        }
+    }
+
+    @Override
+    public Dimension getPreferredSize() {
+        return new Dimension(800, 600);
     }
 }
