@@ -24,7 +24,6 @@ class and synchronized keyword, to implement the parallel merge sort algorithm.
 [20 Marks]
  */
 
-//not sure
 package Task6;
 
 import java.util.Arrays;
@@ -33,6 +32,8 @@ public class ParallelMergeSort {
     public static void main(String[] args) {
         int[] arr = { 38, 27, 43, 3, 9, 82, 10 };
         int numThreads = 4; // You can experiment with different thread counts
+
+        System.out.println("Orginal array: " + Arrays.toString(arr));
 
         parallelMergeSort(arr, numThreads);
 
