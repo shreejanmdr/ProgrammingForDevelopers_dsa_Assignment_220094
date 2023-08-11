@@ -1,4 +1,3 @@
-package que4;
 
 /*
  * Question 4-b)
@@ -78,7 +77,7 @@ class Solution {
     }
 }
 
-public class Main {
+public class ques4b {
     public static void main(String[] args) {
         TreeNode root = new TreeNode(1);
         root.left = new TreeNode(2);
